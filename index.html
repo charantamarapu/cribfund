@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundFlow - Gold Arbitrage Management</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --bg-panel: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --accent: #bb86fc;
+            --success: #03dac6;
+            --danger: #cf6679;
+            --border: #333;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-dark); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
+
+        /* Navigation */
+        nav { width: 250px; background-color: var(--bg-panel); padding: 20px 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .logo { font-size: 24px; font-weight: bold; color: var(--accent); padding: 0 20px 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; text-align: center; }
+        .nav-btn { background: none; border: none; color: var(--text-muted); padding: 15px 20px; text-align: left; font-size: 16px; cursor: pointer; transition: 0.3s; width: 100%; }
+        .nav-btn:hover, .nav-btn.active { background-color: rgba(187, 134, 252, 0.1); color: var(--accent); border-left: 4px solid var(--accent); }
+
+        /* Main Content */
+        main { flex: 1; padding: 30px; overflow-y: auto; position: relative; }
+        .view { display: none; animation: fadeIn 0.3s; }
+        .view.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        h2 { margin-bottom: 20px; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+
+        /* Dashboard Cards */
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .card { background-color: var(--bg-panel); padding: 20px; border-radius: 8px; border: 1px solid var(--border); text-align: center; }
+        .card h3 { font-size: 14px; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; }
+        .card .value { font-size: 28px; font-weight: bold; color: var(--success); }
+        .card .value.neutral { color: var(--text-main); }
+        .card .value.warning { color: #f6c026; }
+
+        /* Forms & Inputs */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: var(--text-muted); }
+        input, select { width: 100%; padding: 10px; background-color: var(--bg-dark); color: var(--text-main); border: 1px solid var(--border); border-radius: 4px; }
+        input:focus, select:focus { outline: none; border-color: var(--accent); }
+        .btn { background-color: var(--accent); color: #000; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn:hover { opacity: 0.8; }
+        .btn-danger { background-color: var(--danger); color: white; }
+        .btn-success { background-color: var(--success); color: black; }
+        .btn-outline { background-color: transparent; color: var(--accent); border: 1px solid var(--accent); }
+        .btn-outline:hover { background-color: rgba(187, 134, 252, 0.1); }
+        .btn-small { padding: 5px 10px; font-size: 12px; }
+        .flex-form { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 20px; background: var(--bg-panel); padding: 20px; border-radius: 8px; flex-wrap: wrap; }
+
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: var(--bg-panel); border-radius: 8px; overflow: hidden; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background-color: rgba(255,255,255,0.05); color: var(--text-muted); font-weight: 600; }
+        tr:hover { background-color: rgba(255,255,255,0.02); }
+        .badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+        .bg-success { background-color: rgba(3, 218, 198, 0.2); color: var(--success); }
+        .bg-warning { background-color: rgba(246, 192, 38, 0.2); color: #f6c026; }
+        .text-success { color: var(--success); }
+        .text-danger { color: var(--danger); }
+
+        /* Chart Grid Layout */
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; padding-bottom: 40px; }
+        .chart-box { background-color: var(--bg-panel); padding: 20px; border-radius: 8px; border: 1px solid var(--border); height: 350px; position: relative; }
+        .chart-box.full-width { grid-column: 1 / -1; height: 400px; }
+        .chart-box h3 { color: var(--text-muted); font-size: 14px; text-transform: uppercase; margin-bottom: 15px; text-align: center; }
+
+        /* Passbook Modal */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: var(--bg-panel); width: 90%; max-width: 900px; max-height: 85vh; border-radius: 8px; border: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+        .modal-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { color: var(--accent); margin: 0; }
+        .modal-close { background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; }
+        .modal-close:hover { color: var(--danger); }
+        .modal-body { padding: 20px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div class="logo">FundFlow</div>
+        <button class="nav-btn active" onclick="switchTab('dashboard')">Dashboard</button>
+        <button class="nav-btn" onclick="switchTab('trades')">Daily Entry</button>
+        <button class="nav-btn" onclick="switchTab('users')">User Management</button>
+        <button class="nav-btn" onclick="switchTab('reports')">Reports & Analytics</button>
+        <button class="nav-btn" onclick="switchTab('settings')">Settings & Data</button>
+    </nav>
+
+    <main>
+        <section id="dashboard" class="view active">
+            <h2>Overview</h2>
+            <div class="cards">
+                <div class="card"><h3>Total Reserve Pool</h3><div id="dash-reserve" class="value neutral">$0.00</div></div>
+                <div class="card"><h3>Total Settled Profit</h3><div id="dash-settled" class="value">$0.00</div></div>
+                <div class="card"><h3>Unsettled Profit</h3><div id="dash-unsettled" class="value warning">$0.00</div></div>
+            </div>
+            <h3>Recent Trades</h3>
+            <table>
+                <thead><tr><th>Date</th><th>Profit</th><th>Status</th></tr></thead>
+                <tbody id="dash-trades-body"></tbody>
+            </table>
+        </section>
+
+        <section id="trades" class="view">
+            <h2>Daily Trading Desk</h2>
+            <div class="flex-form" id="trade-form-container">
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="trade-date" required>
+                </div>
+                <div class="form-group">
+                    <label>Gross Profit/Loss ($)</label>
+                    <input type="number" id="trade-profit" step="0.01" required>
+                </div>
+                <button class="btn" onclick="addOrUpdateTrade()" id="trade-submit-btn">Save Entry</button>
+            </div>
+            <table>
+                <thead><tr><th>Date</th><th>Gross Profit</th><th>Status</th><th>Reserve</th><th>Workers</th><th>Investors</th><th>Actions</th></tr></thead>
+                <tbody id="trades-body"></tbody>
+            </table>
+        </section>
+
+        <section id="users" class="view">
+            <h2>User Management</h2>
+            <div class="flex-form">
+                <div class="form-group"><label>Name</label><input type="text" id="user-name"></div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <select id="user-role" onchange="toggleCapitalInput()">
+                        <option value="worker">Worker</option>
+                        <option value="investor">Investor</option>
+                    </select>
+                </div>
+                <div class="form-group" id="capital-group" style="display: none;">
+                    <label>Initial Capital ($)</label>
+                    <input type="number" id="user-capital" value="0" min="0" step="0.01">
+                </div>
+                <button class="btn" onclick="addUser()">Add User</button>
+            </div>
+            <table>
+                <thead><tr><th>Name</th><th>Role</th><th>Invested Capital</th><th>Accumulated Profit</th><th>Actions</th></tr></thead>
+                <tbody id="users-body"></tbody>
+            </table>
+        </section>
+
+        <section id="reports" class="view">
+            <h2>Comprehensive Reports</h2>
+            
+            <div class="form-group" style="max-width: 300px; margin-bottom: 0;">
+                <label>Filter Main Growth Chart</label>
+                <select id="chart-selector" onchange="updateCharts()">
+                    <option value="group">Group Fund (Total Settled Profit)</option>
+                </select>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-box full-width">
+                    <h3>Accumulated Profit Growth Over Time</h3>
+                    <canvas id="lineChart"></canvas>
+                </div>
+                
+                <div class="chart-box">
+                    <h3>Investor Capital Distribution</h3>
+                    <canvas id="capitalPieChart"></canvas>
+                </div>
+
+                <div class="chart-box">
+                    <h3>Lifetime Profit Routing (System-Wide)</h3>
+                    <canvas id="systemPieChart"></canvas>
+                </div>
+
+                <div class="chart-box full-width">
+                    <h3>User Profit Leaderboard (Settled Funds)</h3>
+                    <canvas id="barChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <section id="settings" class="view">
+            <h2>Distribution Settings</h2>
+            <div class="flex-form">
+                <div class="form-group"><label>Reserve (%)</label><input type="number" id="set-reserve" value="40"></div>
+                <div class="form-group"><label>Workers (%)</label><input type="number" id="set-workers" value="20"></div>
+                <div class="form-group"><label>Investors (%)</label><input type="number" id="set-investors" value="40"></div>
+                <button class="btn" onclick="saveSettings()">Update Settings</button>
+            </div>
+            
+            <h2 style="margin-top: 40px;">Data Management</h2>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn" onclick="exportData()">Export Data (JSON)</button>
+                <input type="file" id="import-file" style="display:none" onchange="importData(event)">
+                <button class="btn btn-danger" onclick="document.getElementById('import-file').click()">Import Data</button>
+                <button class="btn btn-danger" onclick="clearData()" style="margin-left: auto;">Factory Reset</button>
+            </div>
+        </section>
+
+        <div id="passbook-modal" class="modal-overlay">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-title">User Passbook</h3>
+                    <button class="modal-close" onclick="closePassbook()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th>Capital Action</th>
+                                <th>Profit Action</th>
+                                <th>Total Capital</th>
+                                <th>Accumulated Profit</th>
+                            </tr>
+                        </thead>
+                        <tbody id="passbook-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // --- Utility ---
+        const getTodayStr = () => new Date().toISOString().split('T')[0];
+        const formatMoney = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
+
+        // Chart.js Default Configs for Dark Mode
+        Chart.defaults.color = '#a0a0a0';
+        Chart.defaults.borderColor = '#333';
+        const chartColors = [
+            'rgba(187, 134, 252, 0.8)', // accent
+            'rgba(3, 218, 198, 0.8)',  // success
+            'rgba(207, 102, 121, 0.8)', // danger
+            'rgba(246, 192, 38, 0.8)',  // warning
+            'rgba(100, 181, 246, 0.8)', // blue
+            'rgba(129, 199, 132, 0.8)'  // green
+        ];
+
+        // --- State Management ---
+        const defaultState = {
+            settings: { reserve: 40, workers: 20, investors: 40 },
+            users: [], 
+            trades: [], 
+            groupFund: { reservePool: 0 }
+        };
+
+        let appData = JSON.parse(localStorage.getItem('fundflow_data')) || defaultState;
+        
+        // Data Migration
+        appData.users = appData.users.map(u => ({...u, capital: u.capital || 0, passbook: u.passbook || []}));
+        
+        // Hold references to all charts so they can be destroyed and redrawn
+        let charts = { line: null, capitalPie: null, systemPie: null, bar: null };
+
+        function saveData() {
+            localStorage.setItem('fundflow_data', JSON.stringify(appData));
+            refreshUI();
+        }
+
+        // --- Navigation ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
+            if(tabId === 'reports') updateCharts();
+        }
+
+        // --- Core Logic & UI Updates ---
+        function refreshUI() {
+            renderDashboard();
+            renderUsers();
+            renderTrades();
+            renderSettings();
+            updateChartSelector();
+        }
+
+        // --- View: Dashboard ---
+        function renderDashboard() {
+            let settled = appData.trades.filter(t => t.status === 'settled').reduce((sum, t) => sum + t.profit, 0);
+            let unsettled = appData.trades.filter(t => t.status === 'unsettled').reduce((sum, t) => sum + t.profit, 0);
+            
+            document.getElementById('dash-reserve').innerText = formatMoney(appData.groupFund.reservePool);
+            document.getElementById('dash-settled').innerText = formatMoney(settled);
+            document.getElementById('dash-unsettled').innerText = formatMoney(unsettled);
+
+            const dashTbody = document.getElementById('dash-trades-body');
+            dashTbody.innerHTML = '';
+            appData.trades.slice().sort((a,b) => new Date(b.date) - new Date(a.date)).slice(0, 5).forEach(t => {
+                dashTbody.innerHTML += `<tr>
+                    <td>${t.date}</td>
+                    <td style="color: ${t.profit >= 0 ? 'var(--success)' : 'var(--danger)'}">${formatMoney(t.profit)}</td>
+                    <td><span class="badge ${t.status === 'settled' ? 'bg-success' : 'bg-warning'}">${t.status.toUpperCase()}</span></td>
+                </tr>`;
+            });
+        }
+
+        // --- View: Users & Passbook ---
+        function toggleCapitalInput() {
+            const role = document.getElementById('user-role').value;
+            const capGroup = document.getElementById('capital-group');
+            if(role === 'investor') { capGroup.style.display = 'block'; } else { capGroup.style.display = 'none'; document.getElementById('user-capital').value = '0'; }
+        }
+
+        function addUser() {
+            const name = document.getElementById('user-name').value.trim();
+            const role = document.getElementById('user-role').value;
+            const capital = parseFloat(document.getElementById('user-capital').value) || 0;
+
+            if (!name) return alert("Enter a name");
+            
+            const passbook = [];
+            if(capital > 0) { passbook.push({ date: getTodayStr(), desc: 'Initial Investment Deposited', capitalChange: capital, profitChange: 0, totalCapital: capital, totalProfit: 0 }); }
+            appData.users.push({ id: Date.now().toString(), name, role, capital, balance: 0, passbook });
+            
+            document.getElementById('user-name').value = '';
+            document.getElementById('user-capital').value = '0';
+            saveData();
+        }
+
+        function deleteUser(id) {
+            if(confirm("Delete this user? Balances, capital, and passbook history will be lost.")) {
+                appData.users = appData.users.filter(u => u.id !== id);
+                saveData();
+            }
+        }
+
+        function editUserCapital(id) {
+            const user = appData.users.find(u => u.id === id);
+            if (!user) return;
+            const newCapital = prompt(`Enter new Invested Capital amount for ${user.name}:`, user.capital);
+            if (newCapital === null) return;
+            const parsedCapital = parseFloat(newCapital);
+            if (isNaN(parsedCapital) || parsedCapital < 0) return alert("Invalid amount.");
+
+            if(confirm(`Change capital to ${formatMoney(parsedCapital)}?`)) {
+                const diff = parsedCapital - user.capital;
+                user.capital = parsedCapital;
+                user.passbook.push({ date: getTodayStr(), desc: 'Manual Capital Adjustment', capitalChange: diff, profitChange: 0, totalCapital: user.capital, totalProfit: user.balance });
+                saveData();
+            }
+        }
+
+        function renderUsers() {
+            const tbody = document.getElementById('users-body');
+            tbody.innerHTML = '';
+            appData.users.forEach(u => {
+                const editBtn = u.role === 'investor' ? `<button class="btn btn-small btn-outline" style="margin-right: 5px;" onclick="editUserCapital('${u.id}')">Edit Capital</button>` : '';
+                tbody.innerHTML += `<tr>
+                    <td>${u.name}</td>
+                    <td style="text-transform: capitalize;">${u.role}</td>
+                    <td style="color: var(--text-muted);">${formatMoney(u.capital)}</td>
+                    <td style="color: var(--success); font-weight: bold;">${formatMoney(u.balance)}</td>
+                    <td style="min-width: 250px;">
+                        <button class="btn btn-small" style="background-color: var(--success); color: black; margin-right: 5px;" onclick="openPassbook('${u.id}')">Passbook</button>
+                        ${editBtn}
+                        <button class="btn btn-small btn-danger" onclick="deleteUser('${u.id}')">Delete</button>
+                    </td>
+                </tr>`;
+            });
+        }
+
+        // Passbook Modal Logic
+        function openPassbook(userId) {
+            const user = appData.users.find(u => u.id === userId);
+            if(!user) return;
+            document.getElementById('modal-title').innerText = `${user.name}'s Passbook (${user.role.toUpperCase()})`;
+            const tbody = document.getElementById('passbook-body');
+            tbody.innerHTML = '';
+
+            if(!user.passbook || user.passbook.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-muted)">No transactions.</td></tr>`;
+            } else {
+                user.passbook.forEach(e => {
+                    const capColor = e.capitalChange > 0 ? 'text-success' : (e.capitalChange < 0 ? 'text-danger' : '');
+                    const profColor = e.profitChange > 0 ? 'text-success' : (e.profitChange < 0 ? 'text-danger' : '');
+                    const capDisplay = e.capitalChange !== 0 ? `<span class="${capColor}">${e.capitalChange > 0 ? '+' : ''}${formatMoney(e.capitalChange)}</span>` : '-';
+                    const profDisplay = e.profitChange !== 0 ? `<span class="${profColor}">${e.profitChange > 0 ? '+' : ''}${formatMoney(e.profitChange)}</span>` : '-';
+                    tbody.innerHTML += `<tr><td>${e.date}</td><td>${e.desc}</td><td>${capDisplay}</td><td>${profDisplay}</td><td style="color: var(--text-muted)">${formatMoney(e.totalCapital)}</td><td style="font-weight: bold; color: var(--text-main)">${formatMoney(e.totalProfit)}</td></tr>`;
+                });
+            }
+            document.getElementById('passbook-modal').style.display = 'flex';
+        }
+        function closePassbook() { document.getElementById('passbook-modal').style.display = 'none'; }
+        window.onclick = function(event) { if (event.target == document.getElementById('passbook-modal')) closePassbook(); }
+
+        // --- View: Trades ---
+        document.getElementById('trade-date').valueAsDate = new Date();
+        document.getElementById('trade-date').addEventListener('change', checkDailyEntry);
+
+        function checkDailyEntry() {
+            const existing = appData.trades.find(t => t.date === document.getElementById('trade-date').value);
+            const btn = document.getElementById('trade-submit-btn');
+            const input = document.getElementById('trade-profit');
+            
+            if (existing) {
+                btn.innerText = "Update Entry"; btn.classList.add('bg-warning'); input.value = existing.profit;
+                btn.disabled = existing.status === 'settled';
+                if(btn.disabled) btn.innerText = "Locked (Settled)";
+            } else {
+                btn.innerText = "Save Entry"; btn.classList.remove('bg-warning'); btn.disabled = false; input.value = '';
+            }
+        }
+
+        function addOrUpdateTrade() {
+            const date = document.getElementById('trade-date').value;
+            const profit = parseFloat(document.getElementById('trade-profit').value);
+            if (!date || isNaN(profit)) return alert("Invalid input");
+
+            const existingIndex = appData.trades.findIndex(t => t.date === date);
+            const splits = { reserve: profit * (appData.settings.reserve / 100), workers: profit * (appData.settings.workers / 100), investors: profit * (appData.settings.investors / 100) };
+
+            if (existingIndex > -1) {
+                if(appData.trades[existingIndex].status === 'settled') return alert("Locked.");
+                if(!confirm(`Update entry for ${date}?`)) return;
+                appData.trades[existingIndex].profit = profit;
+                appData.trades[existingIndex].splits = splits;
+            } else {
+                appData.trades.push({ id: Date.now().toString(), date, profit, status: 'unsettled', splits });
+            }
+            checkDailyEntry(); saveData();
+        }
+
+        function settleTrade(id) {
+            const trade = appData.trades.find(t => t.id === id);
+            if (!trade || trade.status === 'settled') return;
+
+            const workers = appData.users.filter(u => u.role === 'worker');
+            const investors = appData.users.filter(u => u.role === 'investor');
+            const totalInvCap = investors.reduce((sum, inv) => sum + inv.capital, 0);
+
+            if(confirm(`Settle this trade?\nReserve: ${formatMoney(trade.splits.reserve)}\nWorkers: ${formatMoney(trade.splits.workers)}\nInvestors: ${formatMoney(trade.splits.investors)}`)) {
+                
+                appData.groupFund.reservePool += trade.splits.reserve;
+                
+                if(workers.length > 0) {
+                    const perWorker = trade.splits.workers / workers.length;
+                    workers.forEach(w => { w.balance += perWorker; w.passbook.push({ date: trade.date, desc: `Profit Split`, capitalChange: 0, profitChange: perWorker, totalCapital: w.capital, totalProfit: w.balance }); });
+                }
+                
+                if(investors.length > 0) {
+                    investors.forEach(inv => {
+                        let earned = totalInvCap > 0 ? (trade.splits.investors * (inv.capital / totalInvCap)) : (trade.splits.investors / investors.length);
+                        inv.balance += earned;
+                        inv.passbook.push({ date: trade.date, desc: `Profit Split`, capitalChange: 0, profitChange: earned, totalCapital: inv.capital, totalProfit: inv.balance });
+                    });
+                }
+
+                trade.status = 'settled';
+                checkDailyEntry(); saveData();
+            }
+        }
+
+        function renderTrades() {
+            const tbody = document.getElementById('trades-body');
+            tbody.innerHTML = '';
+            appData.trades.slice().sort((a,b) => new Date(b.date) - new Date(a.date)).forEach(t => {
+                const actionBtn = t.status === 'unsettled' ? `<button class="btn btn-small btn-success" onclick="settleTrade('${t.id}')">Settle</button>` : `<span style="color:var(--text-muted)">Locked</span>`;
+                tbody.innerHTML += `<tr><td>${t.date}</td><td style="font-weight:bold; color: ${t.profit >= 0 ? 'var(--success)' : 'var(--danger)'}">${formatMoney(t.profit)}</td><td><span class="badge ${t.status === 'settled' ? 'bg-success' : 'bg-warning'}">${t.status.toUpperCase()}</span></td><td>${formatMoney(t.splits.reserve)}</td><td>${formatMoney(t.splits.workers)}</td><td>${formatMoney(t.splits.investors)}</td><td>${actionBtn}</td></tr>`;
+            });
+        }
+
+        // --- View: Settings & Data ---
+        function renderSettings() { document.getElementById('set-reserve').value = appData.settings.reserve; document.getElementById('set-workers').value = appData.settings.workers; document.getElementById('set-investors').value = appData.settings.investors; }
+        function saveSettings() {
+            const r = parseFloat(document.getElementById('set-reserve').value), w = parseFloat(document.getElementById('set-workers').value), i = parseFloat(document.getElementById('set-investors').value);
+            if (r + w + i !== 100) return alert("Must equal 100%");
+            appData.settings = { reserve: r, workers: w, investors: i }; saveData(); alert("Settings updated!");
+        }
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData));
+            const node = document.createElement('a'); node.setAttribute("href", dataStr); node.setAttribute("download", "fundflow_backup.json"); document.body.appendChild(node); node.click(); node.remove();
+        }
+        function importData(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) { try { appData = JSON.parse(e.target.result); appData.users = appData.users.map(u => ({...u, capital: u.capital || 0, passbook: u.passbook || []})); saveData(); alert("Data imported!"); } catch (err) { alert("Invalid JSON."); } };
+            reader.readAsText(file); document.getElementById('import-file').value = ''; 
+        }
+        function clearData() { if(confirm("CRITICAL WARNING: This deletes ALL data.")) { appData = JSON.parse(JSON.stringify(defaultState)); saveData(); alert("Data reset."); } }
+
+        // --- View: Reports (Massive Overhaul) ---
+        function updateChartSelector() {
+            const selector = document.getElementById('chart-selector');
+            const currentVal = selector.value;
+            selector.innerHTML = '<option value="group">Group Fund (Total Settled Profit)</option>';
+            appData.users.forEach(u => { selector.innerHTML += `<option value="${u.id}">${u.name} (${u.role})</option>`; });
+            selector.value = currentVal || 'group';
+        }
+
+        function destroyAllCharts() {
+            Object.values(charts).forEach(chart => { if (chart) chart.destroy(); });
+        }
+
+        function updateCharts() {
+            destroyAllCharts(); // Clear canvas logic to prevent overlaps
+
+            const settledTrades = appData.trades.filter(t => t.status === 'settled').sort((a,b) => new Date(a.date) - new Date(b.date));
+            
+            // --- 1. Line Chart (Growth Over Time) ---
+            const targetId = document.getElementById('chart-selector').value;
+            let lineLabels = [], lineData = [], cumulative = 0;
+
+            if (targetId === 'group') {
+                settledTrades.forEach(t => { lineLabels.push(t.date); cumulative += t.profit; lineData.push(cumulative); });
+            } else {
+                const user = appData.users.find(u => u.id === targetId);
+                if(user && user.passbook) {
+                    // Extract profit history directly from passbook for accurate timeline tracking
+                    user.passbook.filter(p => p.profitChange !== 0).forEach(p => {
+                        lineLabels.push(p.date); lineData.push(p.totalProfit);
+                    });
+                }
+            }
+
+            charts.line = new Chart(document.getElementById('lineChart').getContext('2d'), {
+                type: 'line',
+                data: { labels: lineLabels, datasets: [{ label: targetId === 'group' ? 'Total Settled Profit ($)' : 'Accumulated Profit ($)', data: lineData, borderColor: '#bb86fc', backgroundColor: 'rgba(187, 134, 252, 0.2)', borderWidth: 2, fill: true, tension: 0.3 }] },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            // --- 2. Doughnut Chart (Capital Distribution) ---
+            const investors = appData.users.filter(u => u.role === 'investor' && u.capital > 0);
+            charts.capitalPie = new Chart(document.getElementById('capitalPieChart').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: investors.map(i => i.name),
+                    datasets: [{ data: investors.map(i => i.capital), backgroundColor: chartColors, borderWidth: 1 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+            });
+
+            // --- 3. Pie Chart (System Routing) ---
+            let sysRes = 0, sysWork = 0, sysInv = 0;
+            settledTrades.forEach(t => { sysRes += t.splits.reserve; sysWork += t.splits.workers; sysInv += t.splits.investors; });
+            charts.systemPie = new Chart(document.getElementById('systemPieChart').getContext('2d'), {
+                type: 'pie',
+                data: {
+                    labels: ['Reserve Pool', 'Workers Pool', 'Investors Pool'],
+                    datasets: [{ data: [sysRes, sysWork, sysInv], backgroundColor: ['#cf6679', '#03dac6', '#bb86fc'], borderWidth: 1 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+
+            // --- 4. Bar Chart (User Profit Leaderboard) ---
+            const usersWithProfit = appData.users.filter(u => u.balance > 0).sort((a, b) => b.balance - a.balance); // Sorted Highest to Lowest
+            charts.bar = new Chart(document.getElementById('barChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: usersWithProfit.map(u => u.name),
+                    datasets: [{
+                        label: 'Total Earned Profit ($)',
+                        data: usersWithProfit.map(u => u.balance),
+                        backgroundColor: usersWithProfit.map(u => u.role === 'worker' ? 'rgba(3, 218, 198, 0.6)' : 'rgba(187, 134, 252, 0.6)'),
+                        borderColor: usersWithProfit.map(u => u.role === 'worker' ? '#03dac6' : '#bb86fc'),
+                        borderWidth: 1
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        // Initialize
+        toggleCapitalInput();
+        checkDailyEntry();
+        refreshUI();
+    </script>
+</body>
+</html>
