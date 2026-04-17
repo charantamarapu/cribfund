@@ -741,14 +741,27 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
 <script>
 // ─── STATE ───────────────────────────────────────────────────────────────────
-let state = {
-  users: [],
-  trades: [],
-  settings: { defaultReserve: 10 },
-  editTradeId: null,
-  editUserId: null,
-  settleTradeId: null
-};
+function loadState() {
+  try {
+    const saved = localStorage.getItem('tradefolio_state');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        users: parsed.users || [],
+        trades: parsed.trades || [],
+        settings: parsed.settings || { defaultReserve: 10 },
+        editTradeId: null, editUserId: null, settleTradeId: null
+      };
+    }
+  } catch(e) {}
+  return { users: [], trades: [], settings: { defaultReserve: 10 }, editTradeId: null, editUserId: null, settleTradeId: null };
+}
+function saveState() {
+  localStorage.setItem('tradefolio_state', JSON.stringify({
+    users: state.users, trades: state.trades, settings: state.settings
+  }));
+}
+let state = loadState();
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2,10);
@@ -1374,6 +1387,7 @@ document.getElementById('btnAddUserEmpty').addEventListener('click', openAddUser
 
 // ─── RENDER ALL ───────────────────────────────────────────────────────────────
 function renderAll() {
+  saveState();
   renderDashboard();
   renderTrades();
   renderUsers();
@@ -1384,29 +1398,9 @@ function renderAll() {
   }
 }
 
-// ─── SEED DATA ────────────────────────────────────────────────────────────────
-state.users = [
-  { id: 'w1', name: 'Arjun Kumar', role: 'worker', capitalInvested: 5000, profitShare: 40, accumulatedProfit: 0 },
-  { id: 'w2', name: 'Priya Nair', role: 'worker', capitalInvested: 0, profitShare: 35, accumulatedProfit: 0 },
-  { id: 'i1', name: 'Rajan Mehta', role: 'investor', capitalInvested: 50000, profitShare: 25, accumulatedProfit: 0 },
-];
-state.trades = [
-  { id: 't1', date: '2026-04-14', grossProfit: 1850, reservePct: 10, reserveAmount: 185, workerIds: ['w1','w2'], status: 'settled' },
-  { id: 't2', date: '2026-04-13', grossProfit: 2100, reservePct: 10, reserveAmount: 210, workerIds: ['w1'], status: 'settled' },
-  { id: 't3', date: '2026-04-15', grossProfit: 975, reservePct: 10, reserveAmount: 97.5, workerIds: ['w1','w2'], status: 'pending' },
-  { id: 't4', date: '2026-04-12', grossProfit: 3200, reservePct: 10, reserveAmount: 320, workerIds: ['w2'], status: 'pending' },
-];
-// Apply settled profits
-['t1','t2'].forEach(id => {
-  const t = state.trades.find(t => t.id === id);
-  const dist = calcDistribution(t);
-  dist.forEach(d => {
-    const u = state.users.find(u => u.id === d.user.id);
-    if (u) u.accumulatedProfit = (u.accumulatedProfit || 0) + d.amount;
-  });
-});
 
 renderAll();
+
 // ─── CHART INSTANCES ─────────────────────────────────────────────────────────
 let chartInstances = {};
 function destroyChart(id) {
